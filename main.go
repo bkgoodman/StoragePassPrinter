@@ -55,9 +55,9 @@ func drawCenteredString(str string,y int,fontsize int,usbDeviceFile *os.File) {
       panic(err)
     }
     dc.DrawStringAnchored(str, float64(WIDTH/2), float64(HEIGHT/2), 0.5, 0.5)
-    dc.SavePNG("out.png")
+    dc.SavePNG("/run/lableout.png")
 
-    exportbmp("out.png",6,y,usbDeviceFile)
+    exportbmp("/run/lableout.png",6,y,usbDeviceFile)
 }
 
 func main() {
@@ -111,9 +111,9 @@ func main() {
     futureDateString := futureDate.Format("Mon, 02-Jan-06")
     fmt.Println(futureDateString)
 
-    formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 12:04 PM")
+    formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
 
-  drawCenteredString("Item was left on",350,36,usbDeviceFile)
+  drawCenteredString("Item was left on",337,36,usbDeviceFile)
   drawCenteredString(formattedDateTime,400,42,usbDeviceFile)
   drawCenteredString("Must be removed on or before",480,36,usbDeviceFile)
   drawCenteredString(futureDateString,520,100,usbDeviceFile)

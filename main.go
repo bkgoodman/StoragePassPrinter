@@ -51,7 +51,7 @@ func drawCenteredString(str string,y int,fontsize int,usbDeviceFile *os.File) {
     dc.SetRGB(1, 1, 1)
     dc.Clear()
     dc.SetRGB(0, 0, 0)
-    if err := dc.LoadFontFace("Ubuntu-R.ttf", 80); err != nil {
+    if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(fontsize)); err != nil {
       panic(err)
     }
     dc.DrawStringAnchored(str, float64(WIDTH/2), float64(HEIGHT/2), 0.5, 0.5)
@@ -105,30 +105,18 @@ func main() {
           usbDeviceFile.Write([]byte("\n"))
     }
 
-    /*
-    // Now print from weird library
-    var WIDTH int = 800
-    var HEIGHT int = 160
-
-    dc := gg.NewContext(WIDTH, HEIGHT)
-    dc.SetRGB(1, 1, 1)
-    dc.Clear()
-    dc.SetRGB(0, 0, 0)
-    if err := dc.LoadFontFace("Ubuntu-R.ttf", 80); err != nil {
-      panic(err)
-    }
-    dc.DrawStringAnchored("Hello, World!", float64(WIDTH/2), float64(HEIGHT/2), 0.5, 0.5)
-    dc.SavePNG("out.png")
-
-    exportbmp("out.png",6,300,usbDeviceFile)
-    */
-
-  drawCenteredString("Hello, World!",460,80,usbDeviceFile)
-      currentDate := time.Now()
+  drawCenteredString("Member McLastname",220,60,usbDeviceFile)
+    currentDate := time.Now()
     futureDate := currentDate.AddDate(0, 0, 3)
     futureDateString := futureDate.Format("Mon, 02-Jan-06")
     fmt.Println(futureDateString)
-  drawCenteredString(futureDateString,560,80,usbDeviceFile)
+
+    formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 12:04 PM")
+
+  drawCenteredString("Item was left on",350,36,usbDeviceFile)
+  drawCenteredString(formattedDateTime,400,42,usbDeviceFile)
+  drawCenteredString("Must be removed on or before",480,36,usbDeviceFile)
+  drawCenteredString(futureDateString,520,100,usbDeviceFile)
 
     usbDeviceFile.Write([]byte("PRINT 1,1\n\n\n"))
     //time.Sleep(5 * time.Second)

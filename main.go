@@ -18,7 +18,7 @@ func exportbmp(filename string, xstart int, ystart int, usbDeviceFile *os.File) 
 
     fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
     for y := 0; y < img.Bounds().Max.Y; y++ {
-      usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP %d,%d,%d,1,0,",xstart,ystart+y,img.Bounds().Max.X/8)))
+      usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP %d,%d,%d,1,1,",xstart,ystart+y,img.Bounds().Max.X/8)))
     for x := 0; x < img.Bounds().Max.X; x+= 8{
       data := 0
       for i:=0;i<8;i++ {
@@ -78,7 +78,7 @@ func main() {
     }
     defer usbDeviceFile.Close()
     //arr := []byte("SIZE 6,4\nGAP 0.13,0\nDIRECTION 1\nCLS\nTEXT 10,10,\"0\",0,1,1,\"Hello, TSPL Printer!\"\nPRINT 1\n")
-    arr := []byte("SIZE 6,4\nGAP 0.13,0\nCLS\n")
+    arr := []byte("\n\nSIZE 6,4\nGAP 0.13,0\nCLS\n")
 
     //arr := []byte("SIZE 6,4\nGAP 0.13,0\nCLS\nCIRCLE 250,20,100,5\nPRINT 1\n")
     //arr := []byte("SIZE 6,4\nGAP 0.13,0\nCLS\nTEXT 1,1,\"3\",0,1,1,\"Hello\"\nPRINT 1\n")
@@ -130,7 +130,7 @@ func main() {
     fmt.Println(futureDateString)
   drawCenteredString(futureDateString,560,80,usbDeviceFile)
 
-    usbDeviceFile.Write([]byte("PRINT 1\n"))
+    usbDeviceFile.Write([]byte("PRINT 1,1\n\n\n"))
     //time.Sleep(5 * time.Second)
     var inbuf []byte
     test,err := usbDeviceFile.Read(inbuf)

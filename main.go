@@ -4,8 +4,11 @@ import (
 	"fmt"
   "time"
   "os"
+  "log"
 	"image/png"
   "github.com/fogleman/gg"
+  "go.bug.st/serial"
+  "bytes"
 
 )
 
@@ -60,9 +63,79 @@ func drawCenteredString(str string,y int,fontsize int,usbDeviceFile *os.File) {
     exportbmp("/run/lableout.png",6,y,usbDeviceFile)
 }
 
+func readrfid() uint64  {
+      // Open the serial port
+    mode := &serial.Mode{
+      BaudRate: 115200,
+    }
+    port, err := serial.Open("/dev/ttyUSB0", mode)
+    if err != nil {
+      log.Fatal(err)
+    }
+    //port.SetReadTimeout(time.Second)
+    buff := make([]byte, 9)
+    n, err := port.Read(buff)
+    for {
+      if err != nil {
+        log.Fatal(err)
+        break
+      }
+      if n == 0 {
+        fmt.Println("\nEOF")
+        break
+      }
+      if n != 9 {
+        fmt.Println("\nPARTIAL")
+       continue
+      }
+      fmt.Printf("%x", string(buff[:n]))
+      break
+    }
+
+
+        // Define the preambles and terminator
+    preambles := []byte{0x02, 0x09}
+    terminator := []byte{0x03}
+
+
+    // Verify the preambles
+    if !bytes.Equal(buff[0:2], preambles) {
+      panic(fmt.Errorf("invalid preambles: %v", buff[0:2]))
+    }
+
+    // Verify the terminator
+    if !bytes.Equal(buff[8:9], terminator) {
+      panic(fmt.Errorf("invalid terminator: %v", buff[8:9]))
+    }
+
+
+    // Print the data
+    fmt.Println(buff)
+    data := buff[1:7]
+    // XOR all the bytes in the slice
+    xor := data[0]
+    for i := 1; i < len(data); i++ {
+        xor ^= data[i]
+        fmt.Printf("Byte %d is %x\n",i,data[i])
+    }
+    
+    var tagno uint64
+    tagno= (uint64(data[2]) << 24) | (uint64(data[3])<<16) | (uint64(data[4]) <<8 ) | uint64(data[5])
+    //fmt.Printf("XOR is %x should be %x Tagno %d\n",xor,buff[7],tagno)
+    if xor!= buff[7] {
+      return 0
+    }
+
+    return tagno
+
+}
+
 func main() {
 
 
+    var tagno = readrfid();
+    fmt.Println(tagno)
+    return;
       // Open the USB device file
     logo, err := os.OpenFile("makeit_logo_lable.png", os.O_RDWR, 0644)
     img, err := png.Decode(logo)

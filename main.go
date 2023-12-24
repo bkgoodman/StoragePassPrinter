@@ -179,8 +179,8 @@ func main() {
 
     if (true) {
       /* DYMO PRINTER */
-      lines :=800
-      bpl := 40 // Bytes Per Line
+      lines :=960
+      bpl := 38 // Bytes Per Line
 
       // We are doing this rotated
       var HEIGHT = (bpl * 8)
@@ -189,10 +189,39 @@ func main() {
       dc.SetRGB(1, 1, 1)
       dc.Clear()
       dc.SetRGB(0, 0, 0)
-      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(64)); err != nil {
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
         panic(err)
       }
-      dc.DrawStringAnchored("Testing", float64(WIDTH/2), float64(HEIGHT/2), 0.5, 0.5)
+
+      offset := float64(0)
+      im, err := gg.LoadPNG("milsm.png")
+      if err == nil {
+        dc.DrawImage(im, 20, 20)
+        offset =float64(im.Bounds().Dx()) /float64(2 )
+      }
+
+      currentDate := time.Now()
+      futureDate := currentDate.AddDate(0, 0, 3)
+      futureDateString := futureDate.Format("Mon, 02-Jan-06")
+
+      formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
+
+      dc.DrawStringAnchored(futureDateString, float64(WIDTH/2)+offset, 180, 0.5, 0.5)
+      dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
+      dc.DrawStringAnchored("Temporary Storage Pass", float64(WIDTH/2)+offset, 50, 0.5, 0.5)
+      dc.DrawStringAnchored("Firstname McMemberson", float64(WIDTH/2)+offset, 120, 0.5, 0.5)
+      dc.LoadFontFace("Ubuntu-R.ttf", float64(24))
+      dc.DrawStringAnchored(fmt.Sprintf("Left on: %s",formattedDateTime), float64(WIDTH/2)+offset, 240, 0.5, 0.5)
+      dc.SetLineWidth(2)
+      dc.DrawRectangle(10, 10, float64(WIDTH-10), float64(HEIGHT-10))
+      dc.Stroke()
+
+
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(18)); err != nil {
+        panic(err)
+      }
+      textbody := "Items may be discarded and disposal charges may be incurred if items are left after specified date."
+      dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
       dc.SavePNG("lableout.png")
 
       fmt.Println("Lines",lines,"colbytes",bpl)
@@ -208,7 +237,6 @@ func main() {
         }
       }
       */
-      exportbmp_dymo("lableout.png", usbDeviceFile)
       usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
 
     } else {

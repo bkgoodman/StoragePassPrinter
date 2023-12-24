@@ -12,6 +12,31 @@ import (
 
 )
 
+func exportbmp_dymo(filename string, usbDeviceFile *os.File) {
+    logo, err := os.OpenFile(filename, os.O_RDWR, 0644)
+    img, err := png.Decode(logo)
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
+    for y := 0; y < img.Bounds().Max.Y; y++ {
+      usbDeviceFile.Write([]byte{byte(0x16)})
+    for x := 0; x < img.Bounds().Max.X; x+=8 {
+      data := 0
+      for i:=0;i<8;i++ {
+            r, _, _, _ := img.At(x+i, y).RGBA()
+            if (r <= 0x8000) {
+              data |= (1 << (7-i))
+              //data |= (1 << i)
+              //fmt.Println("-- PT",x+i,y,r)
+            }
+          }
+          usbDeviceFile.Write([]byte{byte(data)})
+        }
+    }
+}
+
 func exportbmp(filename string, xstart int, ystart int, usbDeviceFile *os.File) {
     logo, err := os.OpenFile(filename, os.O_RDWR, 0644)
     img, err := png.Decode(logo)
@@ -133,9 +158,10 @@ func readrfid() uint64  {
 func main() {
 
 
-    var tagno = readrfid();
-    fmt.Println(tagno)
-    return;
+    //var tagno = readrfid();
+    //fmt.Println(tagno)
+    //return;
+
       // Open the USB device file
     logo, err := os.OpenFile("makeit_logo_lable.png", os.O_RDWR, 0644)
     img, err := png.Decode(logo)
@@ -150,6 +176,42 @@ func main() {
         return
     }
     defer usbDeviceFile.Close()
+
+    if (true) {
+      /* DYMO PRINTER */
+      lines :=96
+      bpl := 40 // Bytes Per Line
+
+      // We are doing this rotated
+      var HEIGHT = (bpl * 8)
+      var WIDTH = lines
+      dc := gg.NewContext(HEIGHT,WIDTH)
+      dc.SetRGB(1, 1, 1)
+      dc.Clear()
+      dc.SetRGB(0, 0, 0)
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(64)); err != nil {
+        panic(err)
+      }
+      dc.DrawStringAnchored("Testing", float64(HEIGHT/2), float64(WIDTH/2), 0.5, 0.5)
+      dc.SavePNG("lableout.png")
+
+      usbDeviceFile.Write([]byte{27,0x44,byte(bpl)})
+      usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
+      /*
+      l:=0
+      i:=0
+      for l=0;l<lines;l++ {
+      usbDeviceFile.Write([]byte{0x16}) // 16 lines on lable
+        for i=0;i<bpl;i++ {
+          usbDeviceFile.Write([]byte{0xff}) // 16 lines on lable
+        }
+      }
+      */
+      exportbmp_dymo("lableout.png", usbDeviceFile)
+      usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
+
+    } else {
+      /* NON-DYMO BIGGER PRINTER */
     //arr := []byte("SIZE 6,4\nGAP 0.13,0\nDIRECTION 1\nCLS\nTEXT 10,10,\"0\",0,1,1,\"Hello, TSPL Printer!\"\nPRINT 1\n")
     arr := []byte("\n\nSIZE 6,4\nGAP 0.13,0\nCLS\n")
 
@@ -196,5 +258,6 @@ func main() {
     var inbuf []byte
     test,err := usbDeviceFile.Read(inbuf)
     fmt.Println(test,err,inbuf)
+  }
     fmt.Println("Done")
   }

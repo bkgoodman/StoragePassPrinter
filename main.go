@@ -9,7 +9,7 @@ import (
   "github.com/fogleman/gg"
   "go.bug.st/serial"
   "bytes"
-	"gopkg.in/yaml.v2"
+	// "gopkg.in/yaml.v2"
 
 )
 
@@ -158,6 +158,8 @@ func readrfid() uint64  {
 
 func main() {
 
+  dymo_label("Firstname McMemberson")
+  return
 
     //var tagno = readrfid();
     //fmt.Println(tagno)
@@ -178,69 +180,6 @@ func main() {
     }
     defer usbDeviceFile.Close()
 
-    if (true) {
-      /* DYMO PRINTER */
-      lines :=960
-      bpl := 38 // Bytes Per Line
-
-      // We are doing this rotated
-      var HEIGHT = (bpl * 8)
-      var WIDTH = lines
-      dc := gg.NewContext(WIDTH,HEIGHT)
-      dc.SetRGB(1, 1, 1)
-      dc.Clear()
-      dc.SetRGB(0, 0, 0)
-      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
-        panic(err)
-      }
-
-      offset := float64(0)
-      im, err := gg.LoadPNG("milsm.png")
-      if err == nil {
-        dc.DrawImage(im, 20, 20)
-        offset =float64(im.Bounds().Dx()) /float64(2 )
-      }
-
-      currentDate := time.Now()
-      futureDate := currentDate.AddDate(0, 0, 3)
-      futureDateString := futureDate.Format("Mon, 02-Jan-06")
-
-      formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
-
-      dc.DrawStringAnchored(futureDateString, float64(WIDTH/2)+offset, 180, 0.5, 0.5)
-      dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
-      dc.DrawStringAnchored("Temporary Storage Pass", float64(WIDTH/2)+offset, 50, 0.5, 0.5)
-      dc.DrawStringAnchored("Firstname McMemberson", float64(WIDTH/2)+offset, 120, 0.5, 0.5)
-      dc.LoadFontFace("Ubuntu-R.ttf", float64(24))
-      dc.DrawStringAnchored(fmt.Sprintf("Left on: %s",formattedDateTime), float64(WIDTH/2)+offset, 240, 0.5, 0.5)
-      dc.SetLineWidth(2)
-      dc.DrawRectangle(10, 10, float64(WIDTH-10), float64(HEIGHT-10))
-      dc.Stroke()
-
-
-      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(18)); err != nil {
-        panic(err)
-      }
-      textbody := "Items may be discarded and disposal charges may be incurred if items are left after specified date."
-      dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
-      dc.SavePNG("lableout.png")
-
-      fmt.Println("Lines",lines,"colbytes",bpl)
-      usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
-      usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
-      /*
-      l:=0
-      i:=0
-      for l=0;l<lines;l++ {
-      usbDeviceFile.Write([]byte{0x16}) // 16 lines on lable
-        for i=0;i<bpl;i++ {
-          usbDeviceFile.Write([]byte{0xff}) // 16 lines on lable
-        }
-      }
-      */
-      usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
-
-    } else {
       /* NON-DYMO BIGGER PRINTER */
     //arr := []byte("SIZE 6,4\nGAP 0.13,0\nDIRECTION 1\nCLS\nTEXT 10,10,\"0\",0,1,1,\"Hello, TSPL Printer!\"\nPRINT 1\n")
     arr := []byte("\n\nSIZE 6,4\nGAP 0.13,0\nCLS\n")
@@ -288,6 +227,5 @@ func main() {
     var inbuf []byte
     test,err := usbDeviceFile.Read(inbuf)
     fmt.Println(test,err,inbuf)
-  }
     fmt.Println("Done")
   }

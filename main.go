@@ -1,123 +1,305 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
-  "time"
-  "os"
-  "log"
-	"image/png"
-  "github.com/fogleman/gg"
-  "go.bug.st/serial"
-  "bytes"
+	"log"
+  "net"
+	"os"
+	"strconv"
+	"bufio"
+	 "os/signal"
+	"crypto/x509"
+	"io/ioutil"
+	"sync"
 	"gopkg.in/yaml.v2"
+	"encoding/json"
+	"time"
 
+	"github.com/eclipse/paho.mqtt.golang"
+
+	"encoding/base64"
+	"net/http"
+
+	"github.com/tarm/serial"
+	"bytes"
 )
 
-func exportbmp_dymo(filename string, usbDeviceFile *os.File) {
-    logo, err := os.OpenFile(filename, os.O_RDWR, 0644)
-    img, err := png.Decode(logo)
-    if err != nil {
-        panic(err)
-    }
 
-    fmt.Println("XY Are",img.Bounds().Max.X,img.Bounds().Max.Y)
-    for x := 0; x < img.Bounds().Max.X; x++ {
-      usbDeviceFile.Write([]byte{byte(0x16)})
-    for y := img.Bounds().Max.Y-1;y>=0; y-=8 {
-      data := 0
-      for i:=0;i<8;i++ {
-            r, _, _, _ := img.At(x, y+i).RGBA()
-            if (r <= 0x8000) {
-              //data |= (1 << (7-i))
-              data |= (1 << i)
-              //fmt.Println("-- PT",x+i,y,r)
-            }
-          }
-          usbDeviceFile.Write([]byte{byte(data)})
-        }
-    }
+var client mqtt.Client
+
+type RattConfig struct {
+   CACert string `yaml:"CACert"`
+   ClientCert string `yaml:"ClientCert"`
+   ClientKey string `yaml:"ClientKey"`
+   ClientID string `yaml:"ClientID"`
+   MqttHost string `yaml:"MqttHost"`
+   MqttPort int `yaml:"MqttPort"`
+   ApiURL string `yaml:"ApiURL"`
+   ApiCAFile string `yaml:"ApiCAFile"`
+   ApiUsername string `yaml:"ApiUsername"`
+   ApiPassword string `yaml:"ApiPassword"`
+   Resource string `yaml:"Resource"`
+
+   TagFile string `yaml:"TagFile"`
+
+   NFCdevice string `yaml:"NFCdevice"`
 }
 
-func exportbmp(filename string, xstart int, ystart int, usbDeviceFile *os.File) {
-    logo, err := os.OpenFile(filename, os.O_RDWR, 0644)
-    img, err := png.Decode(logo)
-    if err != nil {
-        panic(err)
-    }
-
-    fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
-    for y := 0; y < img.Bounds().Max.Y; y++ {
-      usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP %d,%d,%d,1,1,",xstart,ystart+y,img.Bounds().Max.X/8)))
-    for x := 0; x < img.Bounds().Max.X; x+= 8{
-      data := 0
-      for i:=0;i<8;i++ {
-            r, _, _, _ := img.At(x+i, y).RGBA()
-            if (r > 0x8000) {
-              data |= (1 << (7-i))
-              //fmt.Println("-- PT",x+i,y,r)
-            }
-          }
-          //fmt.Println("TEST",x,y,data)
-          //data ^=0xAA
-          usbDeviceFile.Write([]byte{byte(data)})
-          if (data == 0xff) {
-            //fmt.Print("  ")
-          } else {
-            //fmt.Printf("%x",data)
-          }
-        }
-          usbDeviceFile.Write([]byte("\n"))
-          //fmt.Println("")
-    }
+// In-memory ACL list
+type ACLlist struct {
+	Tag uint64
+	Level  int
+	Member string
 }
 
-func drawCenteredString(str string,y int,fontsize int,usbDeviceFile *os.File) {
-    // Now print from weird library
-    var WIDTH int = 800
-    var HEIGHT int = fontsize*2
+var validTags []ACLlist
 
-    dc := gg.NewContext(WIDTH, HEIGHT)
-    dc.SetRGB(1, 1, 1)
-    dc.Clear()
-    dc.SetRGB(0, 0, 0)
-    if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(fontsize)); err != nil {
+var cfg RattConfig
+// From API - off the wire
+type ACLentry struct {
+	 Tagid string `json:"tagid"`
+	 Tag_ident string `json:"tag_ident"`
+	 Allowed string `json:"allowed"`
+	 Warning string `json:"warning"`
+	 Member string `json:"member"`
+	 Nickname string `json:"nickname"`
+	 Plan string `json:"plan"`
+	 Last_accessed string `json:"last_accessed"`
+	 Level int `json:"level"`
+	 Raw_tag_id  string `json:"raw_tag_id"`
+}
+
+
+var aclfileMutex sync.Mutex
+
+func GetACLList() {
+	// Lock the mutex before entering the critical section
+	aclfileMutex.Lock()
+	defer aclfileMutex.Unlock()
+
+		// Create a custom transport with your CA certificate
+	caCert, err := ioutil.ReadFile(cfg.ApiCAFile)
+	if err != nil {
+		fmt.Println("Error reading CA certificate: ", err)
+		return
+	}
+
+	caCertPool := x509.NewCertPool()
+	caCertPool.AppendCertsFromPEM(caCert)
+
+	transport := &http.Transport{
+		TLSClientConfig: &tls.Config{
+			RootCAs: caCertPool,
+		},
+	}
+
+	// Create an HTTP client with the custom transport
+	httpClient := &http.Client{Transport: transport}
+
+	// Specify the URL you want to make a request to
+	url := fmt.Sprintf("%s/api/v1/resources/%s/acl",cfg.ApiURL,cfg.Resource)
+
+	// Create a new GET request
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		fmt.Println("Error creating request: ", err)
+		return
+	}
+
+	// Add custom credentials to the request header
+	auth := base64.StdEncoding.EncodeToString([]byte(cfg.ApiUsername + ":" + cfg.ApiPassword))
+	req.Header.Add("Authorization", "Basic "+auth)
+
+	// Make the request
+	response, err := httpClient.Do(req)
+	if err != nil {
+		fmt.Println("Error making request: ", err)
+		return
+	}
+	defer response.Body.Close()
+
+	// Process the response
+	body, err := ioutil.ReadAll(response.Body)
+	if err != nil {
+		fmt.Println("Error reading response body: ", err)
+		return
+	}
+
+	//fmt.Printf("Response:\n%s\n", body)
+		// Unmarshal JSON array into a slice of structs
+	var items []ACLentry
+	err = json.Unmarshal([]byte(body), &items)
+	if err != nil {
+		fmt.Println("Error decoding JSON:", err)
+		return
+	}
+
+	// Open temporary version of tagfile to write
+	file, err := os.Create(cfg.TagFile+".tmp")
+
+	validTags = validTags[:0]
+	// Print the desired field (e.g., "name") from each dictionary
+	for index, item := range items {
+		_ = index
+		//fmt.Println("ID:", index,item.Tagid,item.Raw_tag_id)
+		if (item.Allowed == "allowed") {
+
+			number, err := strconv.ParseUint(item.Raw_tag_id,10,64)
+			if err == nil {
+				validTags = append(validTags, ACLlist{
+					Tag: number,
+					Level: item.Level,
+					Member: item.Member,
+				})
+			}
+			_, err = file.WriteString(fmt.Sprintf("%d %d %s\n",number,item.Level,item.Member))
+			if err != nil {
+			    fmt.Println("Error writing to tag file: ", err)
+			    file.Close()
+			    return
+			}
+		}
+	}
+
+	file.Close()
+
+	// Rename or move the file
+	err = os.Rename(cfg.TagFile+".tmp", cfg.TagFile)
+	if err != nil {
+		fmt.Println("Error moving tag file :", err)
+		return
+	}
+
+
+	// Signal we were updated
+
+	var topic string = fmt.Sprintf("ratt/status/node/%s/acl/update",cfg.ClientID)
+	var message string = "{\"status\":\"downloaded\"}"
+	client.Publish(topic,0,false,message)
+
+}
+
+func ReadTagFile() {
+	aclfileMutex.Lock()
+	defer aclfileMutex.Unlock()
+
+	file,err := os.Open(cfg.TagFile)
+	if (err != nil) {
+		log.Fatal("Error Reading Tag File: ",err)
+		return
+	}
+	defer file.Close()
+
+	// Create a bufio.Scanner to read lines from the file
+	scanner := bufio.NewScanner(file)
+
+	// Loop through each line
+	var tag uint64
+	var level int
+	var member string
+
+	validTags = validTags[:0]
+	for scanner.Scan() {
+		line := scanner.Text()
+		_, err := fmt.Sscanf(line, "%d %d %s",&tag,&level,&member)
+		if err == nil {
+				validTags = append(validTags, ACLlist{
+					Tag: tag,
+					Level: level,
+					Member: member,
+			})
+		}
+	}
+
+}
+
+func onMessageReceived(client mqtt.Client, message mqtt.Message) {
+	//fmt.Printf("Received message on topic: %s\n", message.Topic())
+	//fmt.Printf("Message: %s\n", message.Payload())
+
+	// Is this aun update ACL message? If so - Update
+	if (message.Topic() == "ratt/control/broadcast/acl/update") {
+		fmt.Println("Got ACL Update message")
+		GetACLList()
+	}
+}
+
+func PingSender() {
+
+	for {
+		var topic string = fmt.Sprintf("ratt/status/node/%s/ping",cfg.ClientID)
+		var message string = "{\"status\":\"ok\"}"
+		client.Publish(topic,0,false,message)
+		time.Sleep(120 * time.Second)
+	}
+}
+
+
+func getip() string {
+  interfaces, err := net.Interfaces()
+  if err != nil {
       panic(err)
-    }
-    dc.DrawStringAnchored(str, float64(WIDTH/2), float64(HEIGHT/2), 0.5, 0.5)
-    dc.SavePNG("/run/lableout.png")
+  }
 
-    exportbmp("/run/lableout.png",6,y,usbDeviceFile)
+  for _, i := range interfaces {
+      if i.Name == "wlan0" {
+          addrs, err := i.Addrs()
+          if err != nil {
+              panic(err)
+          }
+
+          // Print all IP addresses associated with wlan0
+          for _, addr := range addrs {
+              var ip net.IP
+              if ipnet, ok := addr.(*net.IPNet); ok {
+                  ip = ipnet.IP
+              }
+              if ip != nil {
+                  return ip.String()
+              }
+          }
+      }
+  }
+  return "???"
 }
-
+// THis reads from the weird USB RFID Serial Protocol
 func readrfid() uint64  {
       // Open the serial port
-    mode := &serial.Mode{
-      BaudRate: 115200,
-    }
-    port, err := serial.Open("/dev/ttyUSB0", mode)
+    //mode := &serial.Mode{
+    //  BaudRate: 115200,
+   // }
+    //port, err := serial.Open(cfg.NFCdevice,mode)
+		c := &serial.Config{Name: cfg.NFCdevice, Baud: 115200, ReadTimeout: time.Second}
+    port, err := serial.OpenPort(c)
     if err != nil {
-      log.Fatal(err)
+			panic(fmt.Errorf("Canot open tty %s: %v",cfg.NFCdevice,err))
     }
-    //port.SetReadTimeout(time.Second)
     buff := make([]byte, 9)
-    n, err := port.Read(buff)
     for {
+			//fmt.Println("READING")
+    	n, err := port.Read(buff)
+			//fmt.Println("READ EXIT")
       if err != nil {
-        log.Fatal(err)
+			  //fmt.Printf("Fatalbreak %v\n",err)
+        //log.Fatal(err)
         break
       }
       if n == 0 {
-        fmt.Println("\nEOF")
-        break
+        //fmt.Println("\nEOF SLEEP")
+				time.Sleep(time.Second * 5)
+        //fmt.Println("\nENDSLEEP")
+        continue
       }
       if n != 9 {
-        fmt.Println("\nPARTIAL")
+        //fmt.Println("\nPARTIAL")
        continue
       }
-      fmt.Printf("%x", string(buff[:n]))
+      //fmt.Printf("%x", string(buff[:n]))
       break
     }
 
+			// fmt.Printf("\nGotdata\n")
 
         // Define the preambles and terminator
     preambles := []byte{0x02, 0x09}
@@ -126,25 +308,27 @@ func readrfid() uint64  {
 
     // Verify the preambles
     if !bytes.Equal(buff[0:2], preambles) {
-      panic(fmt.Errorf("invalid preambles: %v", buff[0:2]))
+      //panic(fmt.Errorf("invalid preambles: %v", buff[0:2]))
+			return 0
     }
 
     // Verify the terminator
     if !bytes.Equal(buff[8:9], terminator) {
-      panic(fmt.Errorf("invalid terminator: %v", buff[8:9]))
+      //panic(fmt.Errorf("invalid terminator: %v", buff[8:9]))
+			return 0
     }
 
 
     // Print the data
-    fmt.Println(buff)
+    //fmt.Println(buff)
     data := buff[1:7]
     // XOR all the bytes in the slice
     xor := data[0]
     for i := 1; i < len(data); i++ {
         xor ^= data[i]
-        fmt.Printf("Byte %d is %x\n",i,data[i])
+        //fmt.Printf("Byte %d is %x\n",i,data[i])
     }
-    
+
     var tagno uint64
     tagno= (uint64(data[2]) << 24) | (uint64(data[3])<<16) | (uint64(data[4]) <<8 ) | uint64(data[5])
     //fmt.Printf("XOR is %x should be %x Tagno %d\n",xor,buff[7],tagno)
@@ -156,138 +340,84 @@ func readrfid() uint64  {
 
 }
 
+
+
 func main() {
+	f, err := os.Open("goratt.cfg")
+	decoder := yaml.NewDecoder(f)
+	err = decoder.Decode(&cfg)
+	if (err != nil) {
+	    log.Fatal("Config Decode error: ",err)
+	}
 
 
-    //var tagno = readrfid();
-    //fmt.Println(tagno)
-    //return;
+	// MQTT broker address
+	broker := fmt.Sprintf("ssl://%s:%d",cfg.MqttHost,cfg.MqttPort)
 
-      // Open the USB device file
-    logo, err := os.OpenFile("makeit_logo_lable.png", os.O_RDWR, 0644)
-    img, err := png.Decode(logo)
-    if err != nil {
-        panic(err)
-    }
+	// MQTT client ID
+	clientID := cfg.ClientID
 
-    usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)
-    //usbDeviceFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0644)
-    if err != nil {
-        fmt.Println("Error opening USB device file:", err)
-        return
-    }
-    defer usbDeviceFile.Close()
+	// MQTT topic to subscribe to
+	topic := "#"
 
-    if (true) {
-      /* DYMO PRINTER */
-      lines :=960
-      bpl := 38 // Bytes Per Line
+	// Load client key pair for TLS (replace with your own paths)
+	cert, err := tls.LoadX509KeyPair(cfg.ClientCert, cfg.ClientKey)
+	if err != nil {
+		log.Fatal("Error loading X509 Keypair: ",err)
+	}
 
-      // We are doing this rotated
-      var HEIGHT = (bpl * 8)
-      var WIDTH = lines
-      dc := gg.NewContext(WIDTH,HEIGHT)
-      dc.SetRGB(1, 1, 1)
-      dc.Clear()
-      dc.SetRGB(0, 0, 0)
-      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
-        panic(err)
-      }
+		// Load your CA certificate (replace with your own path)
+	caCert, err := ioutil.ReadFile(cfg.CACert)
+	if err != nil {
+		log.Fatal("Error reading CA file: ",cfg.CACert,err)
+	}
 
-      offset := float64(0)
-      im, err := gg.LoadPNG("milsm.png")
-      if err == nil {
-        dc.DrawImage(im, 20, 20)
-        offset =float64(im.Bounds().Dx()) /float64(2 )
-      }
+	// Create a certificate pool and add your CA certificate
+	caPool := x509.NewCertPool()
+	caPool.AppendCertsFromPEM(caCert)
 
-      currentDate := time.Now()
-      futureDate := currentDate.AddDate(0, 0, 3)
-      futureDateString := futureDate.Format("Mon, 02-Jan-06")
+	// Create a TLS configuration
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{cert},
+		RootCAs: caPool,
+	}
 
-      formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
+	// Create an MQTT client options
+	opts := mqtt.NewClientOptions().
+		AddBroker(broker).
+		SetClientID(clientID).
+		SetTLSConfig(tlsConfig).
+		SetDefaultPublishHandler(onMessageReceived)
 
-      dc.DrawStringAnchored(futureDateString, float64(WIDTH/2)+offset, 180, 0.5, 0.5)
-      dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
-      dc.DrawStringAnchored("Temporary Storage Pass", float64(WIDTH/2)+offset, 50, 0.5, 0.5)
-      dc.DrawStringAnchored("Firstname McMemberson", float64(WIDTH/2)+offset, 120, 0.5, 0.5)
-      dc.LoadFontFace("Ubuntu-R.ttf", float64(24))
-      dc.DrawStringAnchored(fmt.Sprintf("Left on: %s",formattedDateTime), float64(WIDTH/2)+offset, 240, 0.5, 0.5)
-      dc.SetLineWidth(2)
-      dc.DrawRectangle(10, 10, float64(WIDTH-10), float64(HEIGHT-10))
-      dc.Stroke()
+	// Create an MQTT client
+	client = mqtt.NewClient(opts)
 
+	// Connect to the MQTT broker
+	if token := client.Connect(); token.Wait() && token.Error() != nil {
+		log.Fatal("MQTT Connect error: ",token.Error())
+	}
 
-      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(18)); err != nil {
-        panic(err)
-      }
-      textbody := "Items may be discarded and disposal charges may be incurred if items are left after specified date."
-      dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
-      dc.SavePNG("lableout.png")
+	// Subscribe to the topic
+	if token := client.Subscribe(topic, 0, nil); token.Wait() && token.Error() != nil {
+		log.Fatal("MQTT Subscribe error: ",token.Error())
+	}
 
-      fmt.Println("Lines",lines,"colbytes",bpl)
-      usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
-      usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
-      /*
-      l:=0
-      i:=0
-      for l=0;l<lines;l++ {
-      usbDeviceFile.Write([]byte{0x16}) // 16 lines on lable
-        for i=0;i<bpl;i++ {
-          usbDeviceFile.Write([]byte{0xff}) // 16 lines on lable
-        }
-      }
-      */
-      usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
+	ReadTagFile()
+	GetACLList()
+  go controlpad()
+	go PingSender()
+	fmt.Printf("Connected to %s\n", broker)
 
-    } else {
-      /* NON-DYMO BIGGER PRINTER */
-    //arr := []byte("SIZE 6,4\nGAP 0.13,0\nDIRECTION 1\nCLS\nTEXT 10,10,\"0\",0,1,1,\"Hello, TSPL Printer!\"\nPRINT 1\n")
-    arr := []byte("\n\nSIZE 6,4\nGAP 0.13,0\nCLS\n")
+  print_storagelabel(getip())
+	// Wait for a signal to exit
+	exitsignal := make(chan os.Signal, 1)
+	signal.Notify(exitsignal, os.Interrupt)
+	//fmt.Println("Waitsignal")
+	<-exitsignal
 
-    //arr := []byte("SIZE 6,4\nGAP 0.13,0\nCLS\nCIRCLE 250,20,100,5\nPRINT 1\n")
-    //arr := []byte("SIZE 6,4\nGAP 0.13,0\nCLS\nTEXT 1,1,\"3\",0,1,1,\"Hello\"\nPRINT 1\n")
-    usbDeviceFile.Write(arr)
+	fmt.Println("Got Terminate Signal")
+	// Disconnect from the MQTT broker
+	client.Disconnect(250)
+	fmt.Println("Disconnected from the MQTT broker")
+}
 
-    //usbDeviceFile.Write([]byte("BITMAP 10,10,4,1,0,55 55 FF FF\n"))
-
-    fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
-    for y := 0; y < img.Bounds().Max.Y; y++ {
-      usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP 60,%d,%d,1,0,",y,img.Bounds().Max.X/8)))
-    for x := 0; x < img.Bounds().Max.X; x+= 8{
-      data := 0
-      for i:=0;i<8;i++ {
-            r, _, _, _ := img.At(x+i, y).RGBA()
-            if (r > 0x8000) {
-              data |= (1 << (7-i))
-              //fmt.Println("-- PT",x+i,y,r)
-            }
-          }
-          //fmt.Println("TEST",x,y,data)
-          //data ^=0xAA
-          usbDeviceFile.Write([]byte{byte(data)})
-        }
-          usbDeviceFile.Write([]byte("\n"))
-    }
-
-  drawCenteredString("Member McLastname",220,60,usbDeviceFile)
-    currentDate := time.Now()
-    futureDate := currentDate.AddDate(0, 0, 3)
-    futureDateString := futureDate.Format("Mon, 02-Jan-06")
-    fmt.Println(futureDateString)
-
-    formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
-
-  drawCenteredString("Item was left on",337,36,usbDeviceFile)
-  drawCenteredString(formattedDateTime,400,42,usbDeviceFile)
-  drawCenteredString("Must be removed on or before",480,36,usbDeviceFile)
-  drawCenteredString(futureDateString,520,100,usbDeviceFile)
-
-    usbDeviceFile.Write([]byte("PRINT 1,1\n\n\n"))
-    //time.Sleep(5 * time.Second)
-    var inbuf []byte
-    test,err := usbDeviceFile.Read(inbuf)
-    fmt.Println(test,err,inbuf)
-  }
-    fmt.Println("Done")
-  }

@@ -89,7 +89,7 @@ func drawCenteredString(str string,y int,fontsize int,usbDeviceFile *os.File) {
 }
 
 // This tag number tried to badge in
-func PrintBadge(id int64) {
+func PrintBadge(id int64, no int) {
 	var found bool = false
 	for _,tag := range validTags {
 		if id == int64(tag.Tag) {
@@ -98,7 +98,11 @@ func PrintBadge(id int64) {
 
 		var topic string = fmt.Sprintf("ratt/status/node/%s/personality/storagepass",cfg.ClientID)
 		var message string = fmt.Sprintf("{\"allowed\":true,\"member\":\"%s\"}",tag.Member)
-    print_storagelabel(strings.Replace(tag.Member,"."," ",-1))
+    if (no ==2) {
+      print_freetable(strings.Replace(tag.Member,"."," ",-1))
+    } else {
+      print_storagelabel(strings.Replace(tag.Member,"."," ",-1))
+    }
 		client.Publish(topic,0,false,message)
 			return
 		} 
@@ -110,6 +114,77 @@ func PrintBadge(id int64) {
 		return
 	}
 }
+func print_freetable(member string) {
+
+    usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)
+    //usbDeviceFile, err := os.OpenFile("/dev/tty", os.O_RDWR, 0644)
+    if err != nil {
+        fmt.Println("Error opening USB device file:", err)
+        return
+    }
+    defer usbDeviceFile.Close()
+      /* DYMO PRINTER */
+      lines :=960
+      bpl := 38 // Bytes Per Line
+
+      // We are doing this rotated
+      var HEIGHT = (bpl * 8)
+      var WIDTH = lines
+      dc := gg.NewContext(WIDTH,HEIGHT)
+      dc.SetRGB(1, 1, 1)
+      dc.Clear()
+      dc.SetRGB(0, 0, 0)
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
+        panic(err)
+      }
+
+      offset := float64(0)
+      im, err := gg.LoadPNG("FreeTableTemplate.png")
+      if err == nil {
+        dc.DrawImage(im, 0, 0)
+        offset =float64(im.Bounds().Dx()) /float64(2 )
+      }
+
+      currentDate := time.Now()
+      futureDate := currentDate.AddDate(0, 0, 8)
+      futureDateString := futureDate.Format("Mon, 02-Jan-06")
+
+      formattedDateTime := currentDate.Format("Mon, 02-Jan-2006 01:04 PM")
+
+      dc.DrawStringAnchored(futureDateString, float64(WIDTH/2)+offset, 180, 0.5, 0.5)
+      dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
+      dc.DrawStringAnchored(member, float64(WIDTH/2)+offset, 120, 0.5, 0.5)
+      dc.LoadFontFace("Ubuntu-R.ttf", float64(24))
+      dc.DrawStringAnchored(fmt.Sprintf("Left on: %s",formattedDateTime), float64(WIDTH/2)+offset, 240, 0.5, 0.5)
+      dc.SetLineWidth(2)
+      dc.DrawRectangle(10, 10, float64(WIDTH-10), float64(HEIGHT-10))
+      dc.Stroke()
+
+
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(18)); err != nil {
+        panic(err)
+      }
+      textbody := "Items will be discarded and after specified date."
+      dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
+      dc.SavePNG("lableout.png")
+
+      fmt.Println("Lines",lines,"colbytes",bpl)
+      usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
+      usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
+      /*
+      l:=0
+      i:=0
+      for l=0;l<lines;l++ {
+      usbDeviceFile.Write([]byte{0x16}) // 16 lines on lable
+        for i=0;i<bpl;i++ {
+          usbDeviceFile.Write([]byte{0xff}) // 16 lines on lable
+        }
+      }
+      */
+    exportbmp_dymo("lableout.png", usbDeviceFile) 
+      usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
+}
+
 func print_storagelabel(member string) {
 
 

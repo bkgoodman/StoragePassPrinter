@@ -15,6 +15,8 @@ import (
 	"gopkg.in/yaml.v2"
 	"encoding/json"
 	"time"
+  //"go.bug.st/serial"
+  "bytes"
 
 	"github.com/eclipse/paho.mqtt.golang"
 
@@ -22,7 +24,6 @@ import (
 	"net/http"
 
 	"github.com/tarm/serial"
-	"bytes"
 )
 
 
@@ -349,7 +350,6 @@ func main() {
 	if (err != nil) {
 	    log.Fatal("Config Decode error: ",err)
 	}
-
 
 	// MQTT broker address
 	broker := fmt.Sprintf("ssl://%s:%d",cfg.MqttHost,cfg.MqttPort)

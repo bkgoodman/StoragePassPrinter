@@ -10,13 +10,8 @@ import (
 
 )
 
-func exportbmp_dymo(filename string, usbDeviceFile *os.File) {
-    logo, err := os.OpenFile(filename, os.O_RDWR, 0644)
-    img, err := png.Decode(logo)
-    if err != nil {
-        panic(err)
-    }
-    defer logo.Close()
+func exportbmp_dymo(dc *gg.Context, usbDeviceFile *os.File) {
+   img := dc.Image()
 
     fmt.Println("XY Are",img.Bounds().Max.X,img.Bounds().Max.Y)
     for x := 0; x < img.Bounds().Max.X; x++ {
@@ -166,22 +161,11 @@ func print_freetable(member string) {
       }
       textbody := "Items will be discarded and after specified date."
       dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
-      dc.SavePNG("lableout.png")
 
       fmt.Println("Lines",lines,"colbytes",bpl)
       usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
       usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
-      /*
-      l:=0
-      i:=0
-      for l=0;l<lines;l++ {
-      usbDeviceFile.Write([]byte{0x16}) // 16 lines on lable
-        for i=0;i<bpl;i++ {
-          usbDeviceFile.Write([]byte{0xff}) // 16 lines on lable
-        }
-      }
-      */
-    exportbmp_dymo("lableout.png", usbDeviceFile) 
+      exportbmp_dymo(dc, usbDeviceFile) 
       usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
 }
 
@@ -248,7 +232,6 @@ func print_storagelabel(member string) {
       }
       textbody := "Items may be discarded and disposal charges may be incurred if items are left after specified date."
       dc.DrawStringWrapped(textbody,float64(WIDTH/2)+offset,float64(HEIGHT-32) , 0.5, 0.5, float64(WIDTH/2), 1.2, gg.AlignCenter)
-      dc.SavePNG("lableout.png")
 
       fmt.Println("Lines",lines,"colbytes",bpl)
       usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
@@ -263,7 +246,7 @@ func print_storagelabel(member string) {
         }
       }
       */
-    exportbmp_dymo("lableout.png", usbDeviceFile) 
+    exportbmp_dymo(dc, usbDeviceFile) 
       usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
 
     } else {

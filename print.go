@@ -137,7 +137,7 @@ func print_freetable(member string) {
       im, err := gg.LoadPNG("FreeTableTemplate.png")
       if err == nil {
         dc.DrawImage(im, 0, 0)
-        offset =float64(im.Bounds().Dx()) /float64(2 )
+        //offset =float64(im.Bounds().Dx()) /float64(2 )
       }
 
       currentDate := time.Now()

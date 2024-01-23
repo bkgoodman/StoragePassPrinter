@@ -112,7 +112,8 @@ func controlpad () {
           led1.High()
           state = STATE_BUTTON1
           if (badge_no != 0) {
-            PrintBadge(badge_no,1)
+            PrintBadge(badge_no,2)
+            timeout = time.Now().Add(time.Second * 5)
           }
           state = STATE_BADGED_IN
         case EVENT_BUTTON2:
@@ -121,21 +122,22 @@ func controlpad () {
           state = STATE_BUTTON2
           if (badge_no != 0) {
             // PRINT
-              PrintBadge(badge_no,2)
+              PrintBadge(badge_no,1)
+            timeout = time.Now().Add(time.Second * 5)
           }
           state = STATE_BADGED_IN
         default:
           badge_no=c
           if (c != 0) {
-            timeout = time.Now().Add(time.Second * 5)
             if (state == STATE_BUTTON1) {
-              /* print */
-              PrintBadge(badge_no,1)
-            }
-            if (state == STATE_BUTTON2) {
               /* print */
               PrintBadge(badge_no,2)
             }
+            if (state == STATE_BUTTON2) {
+              /* print */
+              PrintBadge(badge_no,1)
+            }
+            timeout = time.Now().Add(time.Second * 5)
             state = STATE_BADGED_IN
           } else {
             state = STATE_IDLE

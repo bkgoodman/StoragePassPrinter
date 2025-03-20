@@ -24,6 +24,7 @@ import (
 	"net/http"
 
 	"github.com/tarm/serial"
+    "flag"
 )
 
 
@@ -344,7 +345,13 @@ func readrfid() uint64  {
 
 
 func main() {
+    var cfgfile string
+    flag.StringVar(&cfgfile, "config", "goratt.cfg", "Config file name")
 	f, err := os.Open("goratt.cfg")
+    if (err != nil) {
+            fmt.Fprintf(os.Stderr,"Error opening config file %s: %v\n",cfgfile,err)
+            return
+    }
 	decoder := yaml.NewDecoder(f)
 	err = decoder.Decode(&cfg)
 	if (err != nil) {
@@ -406,6 +413,7 @@ func main() {
 	GetACLList()
   go controlpad()
 	go PingSender()
+    shutdown := http_init()
 	fmt.Printf("Connected to %s\n", broker)
 
   print_storagelabel(getip())
@@ -416,6 +424,7 @@ func main() {
 	<-exitsignal
 
 	fmt.Println("Got Terminate Signal")
+    shutdown()
 	// Disconnect from the MQTT broker
 	client.Disconnect(250)
 	fmt.Println("Disconnected from the MQTT broker")

@@ -1,4 +1,4 @@
-module main
+module spp
 
 go 1.18
 

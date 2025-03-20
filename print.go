@@ -13,7 +13,7 @@ import (
 func exportbmp_dymo(dc *gg.Context, usbDeviceFile *os.File) {
    img := dc.Image()
 
-    fmt.Println("XY Are",img.Bounds().Max.X,img.Bounds().Max.Y)
+    //fmt.Println("XY Are",img.Bounds().Max.X,img.Bounds().Max.Y)
     for x := 0; x < img.Bounds().Max.X; x++ {
       usbDeviceFile.Write([]byte{byte(0x16)})
     for y := img.Bounds().Max.Y-1;y>=0; y-=8 {
@@ -39,7 +39,7 @@ func exportbmp(filename string, xstart int, ystart int, usbDeviceFile *os.File) 
     }
     defer logo.Close()
 
-    fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
+    //fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
     for y := 0; y < img.Bounds().Max.Y; y++ {
       usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP %d,%d,%d,1,1,",xstart,ystart+y,img.Bounds().Max.X/8)))
     for x := 0; x < img.Bounds().Max.X; x+= 8{
@@ -169,6 +169,34 @@ func print_freetable(member string) {
       usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
 }
 
+func print_aruco_dymo(code int, member string) {
+    usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)
+    if err != nil {
+        fmt.Println("Error opening USB device file:", err)
+        return
+    }
+    defer usbDeviceFile.Close()
+      /* DYMO PRINTER */
+      lines :=960
+      bpl := 38 // Bytes Per Line
+
+      // We are doing this rotated
+      var HEIGHT = (bpl * 8)
+      var WIDTH = lines
+      dc := gg.NewContext(WIDTH,HEIGHT)
+      dc.SetRGB(1, 1, 1)
+      dc.Clear()
+      dc.SetRGB(0, 0, 0)
+      if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
+        panic(err)
+      }
+
+      // Dump Buffer to Printer
+      usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)
+      usbDeviceFile.Write([]byte{27,0x4c,byte((lines >> 8)&0xff),byte(lines &0xff)}) // 16 lines on lable
+      exportbmp_dymo(dc, usbDeviceFile) 
+      usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
+}
 func print_storagelabel(member string) {
 
 
@@ -260,7 +288,7 @@ func print_storagelabel(member string) {
 
     //usbDeviceFile.Write([]byte("BITMAP 10,10,4,1,0,55 55 FF FF\n"))
 
-    fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
+    //fmt.Println("XY Aare",img.Bounds().Max.X,img.Bounds().Max.Y)
     for y := 0; y < img.Bounds().Max.Y; y++ {
       usbDeviceFile.Write([]byte(fmt.Sprintf("BITMAP 60,%d,%d,1,0,",y,img.Bounds().Max.X/8)))
     for x := 0; x < img.Bounds().Max.X; x+= 8{

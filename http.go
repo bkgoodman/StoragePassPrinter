@@ -6,11 +6,12 @@ import (
     "sync"
     "context"
     "time"
+    "strconv"
 )
 
 // RequestData struct to hold the extracted parameters
 type RequestData struct {
-	Number string
+	Number int
 	Name   string
 }
 
@@ -33,8 +34,11 @@ func StartHTTPServer(addr string, requestChan chan<- RequestData) (func() error,
         }
 
         // Extract the 'number' and 'name' parameters
-        number := r.Form.Get("number")
         name := r.Form.Get("name")
+        number, err := strconv.Atoi(r.Form.Get("number"))
+        if err != nil {
+            number=0
+        }
 
         // Create a RequestData struct
         data := RequestData{
@@ -87,6 +91,7 @@ func StartHTTPServer(addr string, requestChan chan<- RequestData) (func() error,
 
     return shutdown, nil
 }
+var requestChannel chan RequestData
 // Example usage (you would typically run this in a separate main function or test)
 func http_init() (func() error) {
  	addr := "localhost:8080"

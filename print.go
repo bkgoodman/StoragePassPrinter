@@ -169,7 +169,7 @@ func print_freetable(member string) {
       usbDeviceFile.Write([]byte{27,'E'}) // Form Feed
 }
 
-func print_aruco_dymo(code int, member string) {
+func print_aruco_dymo(codeIndex int, member string) {
     usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)
     if err != nil {
         fmt.Println("Error opening USB device file:", err)
@@ -190,6 +190,49 @@ func print_aruco_dymo(code int, member string) {
       if err := dc.LoadFontFace("Ubuntu-R.ttf", float64(84)); err != nil {
         panic(err)
       }
+
+    aruco_px_size := 300.0
+    aruco_block_px := aruco_px_size/8
+
+    dc.SetRGB(0, 0, 0) /* Black */
+    dc.DrawRectangle(0, 0, aruco_px_size,aruco_px_size)
+    dc.Fill()
+    dc.SetRGB(1, 1, 1) /* White */
+    dc.DrawRectangle(aruco_block_px, aruco_block_px, aruco_block_px *6, aruco_block_px * 6)
+    dc.Fill()
+    dc.SetRGB(0, 0, 0) /* Black */
+    dc.DrawRectangle(aruco_block_px*2, aruco_block_px*2, aruco_block_px *4, aruco_block_px * 4)
+    dc.Fill()
+
+    dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
+    dc.DrawStringAnchored(member, float64(WIDTH/2)+aruco_px_size, 120, 0.5, 0.5)
+    if codeIndex >= 0 && codeIndex < len(aruco) {
+
+            byts := aruco[codeIndex].v
+
+            codewidth := 4
+            for y := 0; y < codewidth; y++ {
+                for x := 0; x < codewidth; x++ {
+                    bitnum := y*codewidth + x
+                    byteIndex := bitnum >> 3 // Equivalent to integer division by 8
+                    if byteIndex < len(byts) {
+                        byteVal := byts[byteIndex]
+                        bit := byteVal & (0x80 >> (bitnum % 8)) // 0x80 is 128 (binary 10000000)
+                        if bit != 0 {
+                            /* Output White */
+                            dc.SetRGB(1, 1, 1) /* White */
+                            dc.DrawRectangle(aruco_block_px *float64(x+2), aruco_block_px *float64(y+2), aruco_block_px, aruco_block_px)
+                            dc.Fill()
+                        } else {
+                            /* Output Black */
+                        }
+                    } else {
+                        /* Output Black */
+                    }
+                }
+                //fmt.Printf(" \u2588\u2588 %s \u2588\u2588\n", s.String())
+            }
+    }
 
       // Dump Buffer to Printer
       usbDeviceFile.Write([]byte{27,0x44,byte(bpl)}) // Width (Bytes)

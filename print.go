@@ -183,15 +183,63 @@ func print_aruco_dymo(codeIndex int, member string) {
 		panic(err)
 	}
 
-	aruco_px_size := 300.0
+	aruco_px_size := float64(HEIGHT)
 	aruco_block_px := aruco_px_size / 6
 
 	dc.SetRGB(0, 0, 0) /* Black */
 	dc.DrawRectangle(0, 0, aruco_px_size, aruco_px_size)
 	dc.Fill()
 
-	dc.LoadFontFace("Ubuntu-R.ttf", float64(48))
-	dc.DrawStringAnchored(member, float64((float64(WIDTH)-aruco_px_size)/2)+aruco_px_size, 120, 0.5, 0.5)
+    max_textwidth := float64(WIDTH) - aruco_px_size 
+    max_textheight := float64(HEIGHT)/3.0
+    members := strings.Split(member,".")
+
+	//dc.DrawStringAnchored(member, float64((float64(WIDTH)-aruco_px_size)/2)+aruco_px_size, 120, 0.5, 0.5)
+
+    // BEGIN AI TEXT
+    y := float64(110) // Initial vertical starting position
+	lineHeight := 0.0
+	totalDrawnHeight := 0.0
+	verticalSpacing := 10.0 // Adjust as needed
+
+	fontSize := float64(84)
+	for _, line := range members {
+		if line == "" {
+			continue // Skip empty lines
+		}
+
+		for {
+            dc.LoadFontFace("Ubuntu-R.ttf", float64(fontSize))
+			lineWidth,lh := dc.MeasureString(line)
+            fmt.Printf("Width %f vs max width %f\n",lineWidth,max_textwidth)
+			if lineWidth <= max_textwidth || fontSize <= 8 { // Ensure minimum font size
+				lineHeight = lh
+                    fmt.Printf("BREAK\n")
+				break
+			}
+			fontSize -= 2 // Reduce font size incrementally
+            fmt.Printf("Drop font size to %f\n",fontSize)
+		}
+
+		// Check if drawing the next line exceeds the maximum text height
+		if totalDrawnHeight+lineHeight > max_textheight {
+			break // Stop drawing if it exceeds the limit
+		}
+		totalDrawnHeight += lineHeight + verticalSpacing
+	}
+
+    totalDrawnHeight = ((lineHeight * float64(len(members))) + (verticalSpacing * float64(len(members)-1)))
+    y = (float64(HEIGHT)/2.0) - (totalDrawnHeight/2.0)
+
+    for _, line := range members {
+                if line == "" {
+                    continue // Skip empty lines
+                }
+		x := (float64(WIDTH) - float64(aruco_px_size)) / 2.0 + float64(aruco_px_size)
+                dc.DrawStringAnchored(line, x, y, 0.5, 0.5)
+                y += lineHeight + verticalSpacing
+        }
+    // END AI TEXT
 	if codeIndex >= 0 && codeIndex < len(aruco) {
 
 		byts := aruco[codeIndex].v
@@ -207,7 +255,7 @@ func print_aruco_dymo(codeIndex int, member string) {
 					if bit != 0 {
 						/* Output White */
 						dc.SetRGB(1, 1, 1) /* White */
-						dc.DrawRectangle(aruco_block_px*float64(x+1), aruco_block_px*float64(y+1), aruco_block_px, aruco_block_px)
+						dc.DrawRectangle(aruco_block_px*float64(x+1), aruco_block_px*float64(y+1), aruco_block_px+1.0, aruco_block_px+1.0)
 						dc.Fill()
 					} else {
 						/* Output Black */
@@ -219,6 +267,11 @@ func print_aruco_dymo(codeIndex int, member string) {
 			//fmt.Printf(" \u2588\u2588 %s \u2588\u2588\n", s.String())
 		}
 	}
+
+
+    // REMOVE ME
+    dc.SavePNG("labelout.png")
+    fmt.Printf("REMOVE ME!!")
 
 	// Dump Buffer to Printer
 	usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)

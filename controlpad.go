@@ -112,7 +112,8 @@ func controlpad() {
 		duty = !duty
 		select {
 		case r := <-requestChannel:
-            print_aruco_dymo(r.Number,r.Name)
+            fmt.Printf("Got aruco request\n")
+			print_aruco_dymo(r.Number, r.Name)
 		case c := <-events:
 			fmt.Println("Got ", c)
 			switch c {

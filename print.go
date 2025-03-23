@@ -211,14 +211,11 @@ func print_aruco_dymo(codeIndex int, member string) {
 		for {
             dc.LoadFontFace("Ubuntu-R.ttf", float64(fontSize))
 			lineWidth,lh := dc.MeasureString(line)
-            fmt.Printf("Width %f vs max width %f\n",lineWidth,max_textwidth)
 			if lineWidth <= max_textwidth || fontSize <= 8 { // Ensure minimum font size
 				lineHeight = lh
-                    fmt.Printf("BREAK\n")
 				break
 			}
 			fontSize -= 2 // Reduce font size incrementally
-            fmt.Printf("Drop font size to %f\n",fontSize)
 		}
 
 		// Check if drawing the next line exceeds the maximum text height
@@ -270,8 +267,8 @@ func print_aruco_dymo(codeIndex int, member string) {
 
 
     // REMOVE ME
-    dc.SavePNG("labelout.png")
-    fmt.Printf("REMOVE ME!!")
+    //dc.SavePNG("labelout.png")
+    //fmt.Printf("REMOVE ME!!")
 
 	// Dump Buffer to Printer
 	usbDeviceFile, err := os.OpenFile("/dev/usb/lp0", os.O_RDWR, 0644)

@@ -47,7 +47,7 @@ func StartHTTPServer(addr string, requestChan chan<- RequestData) (func() error,
 		}
 
 		// Send the data to the channel
-        fmt.Printf("Sending to channel %v\n",data)
+		fmt.Printf("Sending to channel %v\n", data)
 		select {
 		case requestChan <- data:
 			// Successfully sent
@@ -97,8 +97,8 @@ var requestChannel chan RequestData
 
 // Example usage (you would typically run this in a separate main function or test)
 func http_init() func() error {
-	addr := "localhost:8080"
-	requestChannel := make(chan RequestData)
+	addr := ":8080"
+	requestChannel = make(chan RequestData)
 
 	shutdownHttp, err := StartHTTPServer(addr, requestChannel)
 	if err != nil {
